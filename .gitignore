@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+.venv39/
+.venv_py39/
+venv/
+ENV/
+apply_ffc_example/.venv_py39/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Output / data (optional: remove if you want to track example output)
+*_averaged/
+output*/
+debug/
+example_data/
+ffc_map/
+
+# OS
+.DS_Store
+Thumbs.db

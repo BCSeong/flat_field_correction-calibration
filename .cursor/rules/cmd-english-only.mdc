@@ -1,0 +1,22 @@
+---
+description: Use English only for all CMD/batch/terminal interaction to avoid encoding issues
+alwaysApply: true
+---
+
+# CMD / Terminal: English Only
+
+All content that is shown in or sent to **Windows CMD** (Command Prompt) or runs in a **batch file (`.bat` / `.cmd`)** must be **in English only**. Do not use Korean (or other non-ASCII) in:
+
+- `echo` messages in batch files
+- `set /p` prompts and labels
+- Terminal/console output from scripts that are run via CMD or `.bat`
+- Error messages or user prompts that appear in the CMD window
+
+**Reason**: Korean (and many non-ASCII characters) cause encoding issues in CMD (e.g. mojibake, crashes, or broken display). Using English avoids these problems.
+
+**Examples**:
+- In `.bat`: use `echo Error: .venv39 not found` instead of `echo 오류: .venv39를 찾을 수 없습니다`
+- In `.bat`: use `set /p "ARG_INPUT=input_dir (image directory): "` instead of Korean labels
+- When generating or editing batch/terminal-facing text in this project, prefer English for any user-facing strings.
+
+User-facing content in **other contexts** (e.g. Python print to UTF-8 console, README, comments in code) can stay in Korean if desired; this rule focuses on CMD/batch/terminal interaction.
