@@ -204,6 +204,9 @@ def save_averaged_images(averaged_images_float, output_dir, base_name="averaged"
         elif ext == ".tif":
             tifffile.imwrite(output_path, img)
         elif ext == ".png":            
+            img_uint8 = np.clip(img, 0, 255).round().astype(np.uint8)
+            cv2.imwrite(output_path, img_16)
+        elif ext == ".png_16bit":            
             img_16 = (np.clip(img, 0, 1) * 65535).round().astype(np.uint16)            
             cv2.imwrite(output_path, img_16)
         else:
