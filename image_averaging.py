@@ -22,7 +22,7 @@ def load_images(image_dir, pattern="*.bmp"):
     image_files = glob.glob(image_path)
     image_files.sort()  # 파일명 순서대로 정렬
     
-    print(f"로드된 이미지 개수: {len(image_files)}")
+    print(f"Number of images loaded: {len(image_files)}")
     return image_files
 
 def load_dark_image(dark_image_dir):
@@ -31,11 +31,11 @@ def load_dark_image(dark_image_dir):
     """
     dark_image_files = load_images(dark_image_dir)
     if len(dark_image_files) == 0:
-        raise ValueError("오류: dark 이미지를 찾을 수 없습니다.")
+        raise ValueError("Error: No dark image found.")
     path = dark_image_files[0]
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     if img is None:
-        raise ValueError(f"오류: dark 이미지를 로드할 수 없습니다: {path}")
+        raise ValueError(f"Error: Failed to load dark image: {path}")
     return img
 
 
@@ -51,12 +51,12 @@ def average_images_by_cycle(image_files, cycle_length):
         averaged 이미지 리스트 (float32, 개수 = cycle_length)
     """
     if len(image_files) == 0:
-        raise ValueError("이미지 파일이 없습니다.")
+        raise ValueError("No image files.")
     
     # 첫 번째 이미지를 로드하여 크기 확인
     first_img = cv2.imread(image_files[0], cv2.IMREAD_GRAYSCALE)
     if first_img is None:
-        raise ValueError(f"이미지를 로드할 수 없습니다: {image_files[0]}")
+        raise ValueError(f"Failed to load image: {image_files[0]}")
     
     h, w = first_img.shape
     num_groups = cycle_length
@@ -87,11 +87,11 @@ def average_images_by_cycle(image_files, cycle_length):
         if count > 0:
             avg_img_float = sum_img_float / count  # float32로 평균 계산
             averaged_images_float.append(avg_img_float)
-            print(f"그룹 {group_idx}: {len(group_indices)}개 이미지 평균 계산 완료")
+            print(f"Group {group_idx}: averaged {len(group_indices)} images")
     
     
     
-    print(f"총 {len(averaged_images_float)}개의 averaged 이미지 생성")
+    print(f"Created {len(averaged_images_float)} averaged images in total")
     return averaged_images_float
 
 def _split_bayer(img):
@@ -207,9 +207,9 @@ def save_averaged_images(averaged_images_float, output_dir, base_name="averaged"
             img_16 = (np.clip(img, 0, 1) * 65535).round().astype(np.uint16)            
             cv2.imwrite(output_path, img_16)
         else:
-            raise ValueError(f"지원하지 않는 확장자: {ext} (.bmp, .tif, .png)")
-        print(f"저장 완료: {output_path}")
-    print(f"총 {len(averaged_images_float)}개의 이미지 저장 완료")
+            raise ValueError(f"Unsupported extension: {ext} (.bmp, .tif, .png)")
+        print(f"Saved: {output_path}")
+    print(f"Saved {len(averaged_images_float)} images in total")
 
 def save_dark_image(dark_image_uint8, output_dir, base_name="dark"):
     """
@@ -219,7 +219,7 @@ def save_dark_image(dark_image_uint8, output_dir, base_name="dark"):
     output_filename = f"{base_name}.bmp"
     output_path = os.path.join(output_dir, output_filename)
     cv2.imwrite(output_path, dark_image_uint8)
-    print(f"저장 완료: {output_path}")
+    print(f"Saved: {output_path}")
 
 def _draw_debug_figure(entries, axhline_values, value_ylims, supertitle, output_path, reference_line_at_1=False, reference_line_values=None):
     """
@@ -297,7 +297,7 @@ def _draw_debug_figure(entries, axhline_values, value_ylims, supertitle, output_
     fig.subplots_adjust(wspace=0.2, hspace=0.25)
     plt.savefig(output_path, dpi=150)
     plt.close()
-    print(f"저장 완료: {output_path}")
+    print(f"Saved: {output_path}")
 
 
 def save_debug_images(
@@ -385,7 +385,7 @@ def good_bad_judgment(
     dark_good = (dark_min >= nClsdarkMin) & (dark_max <= nClsdarkMax)
 
     print("-" * 50)
-    print("FFC Good/Bad Judgment (cls 범위 기준)")
+    print("FFC Good/Bad Judgment (cls range)")
     print("-" * 50)
     for i in range(len(raw_images_float)):
         status = "good" if directional_good[i] else "bad"
@@ -416,18 +416,34 @@ def load_config(config_path, default=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="이미지를 cycle_length별로 averaging하여 저장")
-    # 필수 positional arguments
-    parser.add_argument("input_dir", type=str, help="입력 이미지 디렉토리")
-    parser.add_argument("dark_image_dir", type=str, help="dark 이미지 디렉토리, 이 디렉토리에는 DARK 이미지 1개만 있어야 함")
-    parser.add_argument("cycle_length", type=int, help="사이클 길이")
-    parser.add_argument("output_dir", type=str, help="출력 디렉토리")
+    parser = argparse.ArgumentParser(description="Average images by cycle_length and save")
+    # Required positionals (optional in CLI so we can prompt interactively when missing)
+    parser.add_argument("input_dir", type=str, nargs="?", default=None, help="Input image directory")
+    parser.add_argument("dark_image_dir", type=str, nargs="?", default=None, help="Dark image directory (single DARK image)")
+    parser.add_argument("cycle_length", type=str, nargs="?", default=None, help="Cycle length")
+    parser.add_argument("output_dir", type=str, nargs="?", default=None, help="Output directory")
     # optional arguments
-    parser.add_argument("--noise_removal", type=str, default=None, help="노이즈 제거 여부 (true/false). 미지정 시 vision_params.json 사용")
-    parser.add_argument("--kernel_size", type=int, default=None, help="노이즈 제거 커널 크기. 미지정 시 vision_params.json 사용")
-    parser.add_argument("--normalize", type=str, default=None, help="정규화(최대값 1) 적용 여부 (true/false). 미지정 시 vision_params.json 또는 true")
+    parser.add_argument("--noise_removal", type=str, default=None, help="Noise removal (true/false). If not set, use vision_params.json")
+    parser.add_argument("--kernel_size", type=int, default=None, help="Noise removal kernel size. If not set, use vision_params.json")
+    parser.add_argument("--normalize", type=str, default=None, help="Normalize to max=1 (true/false). If not set, use vision_params.json or true")
 
     args = parser.parse_args()
+
+    # Interactive prompt for missing required args (English for CMD compatibility)
+
+    if args.input_dir is None:
+        args.input_dir = input("input_dir (image directory): ").strip()
+    if args.dark_image_dir is None:
+        args.dark_image_dir = input("dark_image_dir (dark image directory): ").strip()
+    if args.cycle_length is None:
+        args.cycle_length = input("cycle_length (cycle length): ").strip()
+    if args.output_dir is None:
+        args.output_dir = input("output_dir (output directory): ").strip()
+
+    try:
+        args.cycle_length = int(args.cycle_length)
+    except (TypeError, ValueError):
+        parser.error("cycle_length must be an integer")
 
     cwd = os.path.dirname(os.path.abspath(__file__)) or "."
     recipe = load_config(os.path.join(cwd, "recipe.json"))
@@ -453,12 +469,12 @@ def main():
     else:
         normalize = bool(vision_params.get("normalize", True))
 
-    print(f"입력 디렉토리: {args.input_dir}")
-    print(f"출력 디렉토리: {args.output_dir}")
-    print(f"Cycle Length: {args.cycle_length}")
-    print(f"Noise removal: {noise_removal} (vision_params.json 또는 --noise_removal)")
-    print(f"Kernel size: {kernel_size} (vision_params.json 또는 --kernel_size)")
-    print(f"Normalize: {normalize} (vision_params.json 또는 --normalize)")
+    print(f"Input dir: {args.input_dir}")
+    print(f"Output dir: {args.output_dir}")
+    print(f"Cycle length: {args.cycle_length}")
+    print(f"Noise removal: {noise_removal} (from vision_params.json or --noise_removal)")
+    print(f"Kernel size: {kernel_size} (from vision_params.json or --kernel_size)")
+    print(f"Normalize: {normalize} (from vision_params.json or --normalize)")
     print("-" * 50)
 
     # Step1: ffc 이미지 로드, dark 이미지 로드
@@ -466,7 +482,7 @@ def main():
     dark_image_uint8 = load_dark_image(args.dark_image_dir)
 
     if len(image_files) == 0:
-        print("오류: 이미지 파일을 찾을 수 없습니다.")
+        print("Error: No image files found.")
         return
 
     # Step2: cycle_length별로 averaging
@@ -478,9 +494,9 @@ def main():
     )
 
     # Step4: 이미지 저장 (정규화 시 tif, 미정규화 시 bmp / 정규화 시 정규화 전 결과도 tif로 저장)
-    save_averaged_images(averaged_images_float, args.output_dir, base_name="averaged", ext=".tif" if normalize else ".bmp")
+    save_averaged_images(averaged_images_float, args.output_dir, base_name="averaged_norm", ext=".tif" if normalize else ".bmp")
     if normalize:
-        save_averaged_images(raw_images_float, args.output_dir, base_name="averaged_pre_normalized", ext=".tif")
+        save_averaged_images(raw_images_float, args.output_dir, base_name="averaged_wo_norm", ext=".png")
     save_dark_image(dark_image_uint8, args.output_dir, base_name="dark")
 
     # Step5: debug 이미지 저장 (normalized + raw figure)

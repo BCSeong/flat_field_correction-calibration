@@ -27,6 +27,7 @@ output*/
 debug/
 example_data/
 ffc_map/
+vision_example/
 
 # OS
 .DS_Store
