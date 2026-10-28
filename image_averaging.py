@@ -152,31 +152,20 @@ def remove_noise(avg_img_float, kernel_size=5):
     ch3 = _denoise_single_channel(ch3, kernel_size)
     return _merge_bayer(ch0, ch1, ch2, ch3)
 
-def post_process_averaged_images(averaged_images_float, noise_removal=True, kernel_size=5, normalize=True):
+def denoise_averaged_images(averaged_images_float, noise_removal=True, kernel_size=5):
     """
-    Step3: averaged 이미지에 대해 노이즈 제거 및 (옵션) 정규화(최대값 1) 적용.
-
-    Args:
-        averaged_images_float: averaged 이미지 리스트 (float32)
-        noise_removal: Bayer 채널별 median 노이즈 제거 여부
-        kernel_size: median filter 창 크기 (noise_removal=True 일 때)
-        normalize: True면 최대값 1로 정규화, False면 정규화 생략
-
-    Returns:
-        (normalized_images, raw_images): normalized=[0,1] float32, raw=정규화 전 float32
+    Step3-1: 노이즈 제거(옵션) - Bayer raw를 4개 채널로 split 후 각 채널 median blur.
     """
-    normalized = []
-    raw_images = []
-    for idx, avg_img in enumerate(averaged_images_float):
-        if noise_removal:
-            avg_img = remove_noise(avg_img, kernel_size=kernel_size)
-        raw_images.append(avg_img.copy())
-        if normalize:
-            max_val = np.max(avg_img)
-            if max_val > 0:
-                avg_img = avg_img / max_val
-        normalized.append(avg_img)
-    return normalized, raw_images
+    if not noise_removal:
+        return averaged_images_float
+    return [remove_noise(avg_img, kernel_size=kernel_size) for avg_img in averaged_images_float]
+
+
+def normalize_averaged_images(averaged_images_float):
+    """
+    Step3-2: 이미지별 최대값 1 정규화(옵션).
+    """
+    return [avg_img / np.max(avg_img) for avg_img in averaged_images_float]
 
 
 def save_averaged_images(averaged_images_float, output_dir, base_name="averaged", ext=".tif"):
@@ -198,19 +187,16 @@ def save_averaged_images(averaged_images_float, output_dir, base_name="averaged"
         img = np.asarray(img, dtype=np.float32)
         output_filename = f"{base_name}_{idx:04d}{ext}"
         output_path = os.path.join(output_dir, output_filename)
-        if ext == ".bmp":
+        if ext == ".bmp" or ext == ".png":
             img_uint8 = np.clip(img, 0, 255).round().astype(np.uint8)
             cv2.imwrite(output_path, img_uint8)
         elif ext == ".tif":
             tifffile.imwrite(output_path, img)
-        elif ext == ".png":            
-            img_uint8 = np.clip(img, 0, 255).round().astype(np.uint8)
-            cv2.imwrite(output_path, img_16)
         elif ext == ".png_16bit":            
             img_16 = (np.clip(img, 0, 1) * 65535).round().astype(np.uint16)            
             cv2.imwrite(output_path, img_16)
         else:
-            raise ValueError(f"Unsupported extension: {ext} (.bmp, .tif, .png)")
+            raise ValueError(f"Unsupported extension: {ext} (.bmp, .tif, .png, .png_16bit)")
         print(f"Saved: {output_path}")
     print(f"Saved {len(averaged_images_float)} images in total")
 
@@ -428,7 +414,12 @@ def main():
     # optional arguments
     parser.add_argument("--noise_removal", type=str, default=None, help="Noise removal (true/false). If not set, use vision_params.json")
     parser.add_argument("--kernel_size", type=int, default=None, help="Noise removal kernel size. If not set, use vision_params.json")
-    parser.add_argument("--normalize", type=str, default=None, help="Normalize to max=1 (true/false). If not set, use vision_params.json or true")
+    parser.add_argument(
+        "--save_wo_normalized",
+        type=str,
+        default=None,
+        help="If true, save un-normalized result as 16-bit PNG (in addition to normalized TIFF). If not set, use vision_params.json (fallback: normalize).",
+    )
 
     args = parser.parse_args()
 
@@ -467,17 +458,18 @@ def main():
     else:
         kernel_size = int(vision_params.get("kernel_size", 5))
 
-    if args.normalize is not None:
-        normalize = str(args.normalize).lower() in ("true", "1", "yes")
+    if args.save_wo_normalized is not None:
+        save_wo_normalized = str(args.save_wo_normalized).lower() in ("true", "1", "yes")
     else:
-        normalize = bool(vision_params.get("normalize", True))
+        # Backward compatibility: older vision_params.json used "normalize".
+        save_wo_normalized = bool(vision_params.get("save_wo_normalized", vision_params.get("normalize", True)))
 
     print(f"Input dir: {args.input_dir}")
     print(f"Output dir: {args.output_dir}")
     print(f"Cycle length: {args.cycle_length}")
     print(f"Noise removal: {noise_removal} (from vision_params.json or --noise_removal)")
     print(f"Kernel size: {kernel_size} (from vision_params.json or --kernel_size)")
-    print(f"Normalize: {normalize} (from vision_params.json or --normalize)")
+    print(f"Save wo-normalized: {save_wo_normalized} (from vision_params.json or --save_wo_normalized)")
     print("-" * 50)
 
     # Step1: ffc 이미지 로드, dark 이미지 로드
@@ -491,22 +483,28 @@ def main():
     # Step2: cycle_length별로 averaging
     averaged_images_float = average_images_by_cycle(image_files, args.cycle_length)
 
-    # Step3: 노이즈 제거 + (옵션) 최대값 1 정규화
-    averaged_images_float, raw_images_float = post_process_averaged_images(
-        averaged_images_float, noise_removal=noise_removal, kernel_size=kernel_size, normalize=normalize
+    # Step3-1: 노이즈 제거 
+    denoised_images_float = denoise_averaged_images(
+        averaged_images_float, noise_removal=noise_removal, kernel_size=kernel_size
     )
 
-    # Step4: 이미지 저장 (정규화 시 tif, 미정규화 시 bmp / 정규화 시 정규화 전 결과도 tif로 저장)
-    save_averaged_images(averaged_images_float, args.output_dir, base_name="averaged_norm", ext=".tif" if normalize else ".bmp")
-    if normalize:
-        save_averaged_images(raw_images_float, args.output_dir, base_name="averaged_wo_norm", ext=".png")
+    # 디버그 및 저장을 위해 normalized 이미지는 항상 준비
+    normalized_images_float = normalize_averaged_images(denoised_images_float)
+    
+
+    # Step4: 이미지 저장
+    # - save_wo_normalized=True  : normalized TIFF float + un-normalized 8-bit
+    # - save_wo_normalized=False : normalized TIFF
+    save_averaged_images(normalized_images_float, args.output_dir, base_name="averaged_norm", ext=".tif")
+    if save_wo_normalized:
+        save_averaged_images(denoised_images_float, args.output_dir, base_name="averaged_wo_norm", ext=".png")
     save_dark_image(dark_image_uint8, args.output_dir, base_name="dark")
 
     # Step5: debug 이미지 저장 (normalized + raw figure)
     save_debug_images(
-        averaged_images_float,
-        raw_images_float,
-        dark_image_uint8,
+        normalized_images_float, # final normalized images
+        denoised_images_float, # intermediate denoised images
+        dark_image_uint8, # dark image
         args.output_dir,
         nClsDirectionalMin=nClsDirectionalMin,
         nClsDirectionalMax=nClsDirectionalMax,
@@ -516,8 +514,8 @@ def main():
 
     # Step6: good/bad 판정 (모든 처리 완료 후 출력)
     good_bad_judgment(
-        raw_images_float,
-        dark_image_uint8,
+        denoised_images_float, # intermediate denoised images
+        dark_image_uint8, # dark image
         nClsDirectionalMin=nClsDirectionalMin,
         nClsDirectionalMax=nClsDirectionalMax,
         nClsdarkMin=nClsdarkMin,
@@ -526,10 +524,10 @@ def main():
 
 
 if __name__ == "__main__":
-    # usage: python image_averaging.py <input_dir> <dark_image_dir> <cycle_length> <output_dir> [--noise_removal true|false] [--kernel_size 5] [--normalize true|false]
+    # usage: python image_averaging.py <input_dir> <dark_image_dir> <cycle_length> <output_dir> [--noise_removal true|false] [--kernel_size 5] [--save_wo_normalized true|false]
     # example: normalized output:
-    # python image_averaging.py ./example_data/lota_SeqID19 ./example_data/lota_dark 8 ./output_with_normalize --noise_removal true --kernel_size 5 --normalize true
+    # python image_averaging.py ./example_data/lota_SeqID19 ./example_data/lota_dark 8 ./output_with_normalize --noise_removal true --kernel_size 5 --save_wo_normalized true
     # example: unnormalized output:
-    # python image_averaging.py ./example_data/lota_SeqID19 ./example_data/lota_dark 8 ./output_without_normalize --noise_removal true --kernel_size 5 --normalize false
+    # python image_averaging.py ./example_data/lota_SeqID19 ./example_data/lota_dark 8 ./output_without_normalize --noise_removal true --kernel_size 5 --save_wo_normalized false
     main()
 
