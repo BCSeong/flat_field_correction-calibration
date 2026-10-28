@@ -52,6 +52,20 @@ pip install -r requirements.txt
 python image_averaging.py [입력폴더] [dark폴더] [cycle_length] [출력폴더]
 ```
 
+## 예제 데이터
+
+예제 입력·출력은 용량이 커서 git에 포함하지 않습니다(최신 1세트만 공유). 공유 폴더에서 받아 이 폴더에 둡니다.
+
+| 폴더 | 내용 |
+|---|---|
+| `example_data/lota_SeqID19/` | 입력 예제 (SeqID19, 8 조명 × 21 cycle) |
+| `example_data/lota_dark/` | dark 이미지 |
+| `output_lota_SeqID19_wo_normalization/` | 위 입력의 출력 예제 (`averaged_norm_*.tif`, `averaged_wo_norm_*.png`, `dark.bmp`, `debug/`) |
+
+실행 예: `run_ffc_calibration.bat example_data\lota_SeqID19 example_data\lota_dark 8 output_lota_SeqID19_wo_normalization`
+
+- 공유 폴더: `<공유 폴더 링크 — 추가 예정>`
+
 ## 1. add_salt_pepper_noise.py
 ** noise 가 있는 경우에도 FFC 로직이 잘 작동하는지 검토하기 위해 pseudo data 를 생성합니다 **
 입력 폴더의 **모든 이미지에 동일한** salt-and-pepper 노이즈(0 또는 255)를 붙여 새 폴더에 저장합니다.
