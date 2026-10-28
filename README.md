@@ -17,6 +17,41 @@
 
 ---
 
+## 환경 설정과 실행 (Windows / 다른 PC)
+
+다른 PC에서도 이 폴더만 받으면 실행할 수 있도록, 폴더 안에 가상환경(`.venv`)을 만드는 것을 권장합니다.
+
+**1. 가상환경 만들기 (최초 1회)** — Python 3.7 이상 필요 (검증 환경: Python 3.9.12)
+
+```bat
+cd flat_field_correction-calibration
+py -3.9 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+**2. 실행**
+
+- `run_ffc_calibration.bat` 를 더블클릭하거나, 명령창에서 인자를 붙여 실행합니다: `run_ffc_calibration.bat [입력폴더] [dark폴더] [cycle_length] [출력폴더]`
+- 인자 없이 실행하면 필요한 값을 대화형으로 묻습니다.
+- 끝나면 결과 코드(Exit code)를 표시하고 창이 닫히지 않고 대기합니다.
+
+**`run_ffc_calibration.bat` 가 사용하는 Python (찾는 순서)**
+
+1. 이 폴더의 `.venv` (위 1번에서 만든 환경)
+2. 상위 폴더의 `.venv39` (lota_tools 공용 환경, 기존 방식)
+3. PATH의 `py -3` 또는 `python`
+
+셋 다 없으면 가상환경 만드는 방법을 출력하고 종료합니다.
+
+**Linux / macOS** 는 bat 대신 직접 실행합니다.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python image_averaging.py [입력폴더] [dark폴더] [cycle_length] [출력폴더]
+```
+
 ## 1. add_salt_pepper_noise.py
 ** noise 가 있는 경우에도 FFC 로직이 잘 작동하는지 검토하기 위해 pseudo data 를 생성합니다 **
 입력 폴더의 **모든 이미지에 동일한** salt-and-pepper 노이즈(0 또는 255)를 붙여 새 폴더에 저장합니다.
