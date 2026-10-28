@@ -1,4 +1,191 @@
-# Flat Field Correction / Calibration 도구
+# Flat Field Correction / Calibration Tools
+
+English · 한국어 (Korean version below)
+
+---
+
+## Requirements
+
+- Python 3.7+
+- The packages below (install: `pip install -r requirements.txt`)
+
+| Package | Purpose |
+|--------|------|
+| numpy | Array operations |
+| opencv-python | Image read/write, grayscale, median filter |
+| tifffile | TIFF saving |
+| matplotlib | Debug profile/image visualization |
+
+---
+
+## Environment setup and running (Windows / other PCs)
+
+So that the tool can run on another PC just by copying this folder, it is recommended to create a virtual environment (`.venv`) inside the folder.
+
+**1. Create the virtual environment (first time only)** — requires Python 3.7 or later (tested environment: Python 3.9.12)
+
+```bat
+cd flat_field_correction-calibration
+py -3.9 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+**2. Run**
+
+- Double-click `run_ffc_calibration.bat`, or run it from a command prompt with arguments: `run_ffc_calibration.bat [input_folder] [dark_folder] [cycle_length] [output_folder]`
+- If run without arguments, it asks for the required values interactively.
+- When finished, it shows the result code (Exit code) and waits without closing the window.
+
+**Python used by `run_ffc_calibration.bat` (search order)**
+
+1. `.venv` in this folder (the environment created in step 1 above)
+2. `.venv39` in the parent folder (shared lota_tools environment, previous method)
+3. `py -3` or `python` on PATH
+
+If none of the three is found, it prints how to create a virtual environment and exits.
+
+On **Linux / macOS**, run it directly instead of using the bat.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python image_averaging.py [input_folder] [dark_folder] [cycle_length] [output_folder]
+```
+
+## Example data
+
+The example input and output are large, so they are not included in git (only the latest set is shared). Get them from the shared folder and put them in this folder.
+
+| Folder | Contents |
+|---|---|
+| `example_data/lota_SeqID19/` | Input example (SeqID19, 8 illuminations × 21 cycles) |
+| `example_data/lota_dark/` | Dark image |
+| `output_lota_SeqID19_wo_normalization/` | Output example for the input above (`averaged_norm_*.tif`, `averaged_wo_norm_*.png`, `dark.bmp`, `debug/`) |
+
+Run example: `run_ffc_calibration.bat example_data\lota_SeqID19 example_data\lota_dark 8 output_lota_SeqID19_wo_normalization`
+
+- Shared folder: `<shared folder link — to be added>`
+
+## 1. add_salt_pepper_noise.py
+** Generates pseudo data to check that the FFC logic still works well when noise is present **
+Adds **the same** salt-and-pepper noise (0 or 255) to **all images** in the input folder and saves them to a new folder.
+
+- Noise positions and values are the same for every image (the same seed is used)
+- Default ratio 0.1% (of all pixels)
+- Supports both grayscale and color (for color, the same mask is applied to each channel)
+
+### Usage
+
+```bash
+python add_salt_pepper_noise.py [input_dir] [output_dir] [--noise_ratio 0.001] [--seed 42]
+```
+
+| Argument | Default | Description |
+|------|--------|------|
+| `input_dir` | `example_lota_SeqID19_unit1` | Input image folder |
+| `output_dir` | `example_lota_SeqID19_unit1_noisy` | Output image folder |
+| `--noise_ratio` | `0.001` | Noise ratio (0.001 = 0.1%) |
+| `--seed` | `42` | Random seed for reproducibility |
+
+### Examples
+
+```bash
+python add_salt_pepper_noise.py ./input_images ./noisy_images
+python add_salt_pepper_noise.py ./input_images ./noisy_images --noise_ratio 0.002 --seed 123
+```
+
+---
+
+## 2. image_averaging.py
+
+Groups the images in units of **cycle_length** and averages them, then removes noise and normalizes them on a Bayer raw basis, and saves them as TIFF. The dark image is also copied.
+
+- Input: an image folder for FFC + a folder that contains only one dark image
+- Average per cycle → split into 4 Bayer channels, then median filter per channel → normalize to a maximum of 1 → save as TIFF
+- For debugging, generates PNGs with horizontal/vertical profiles + image layout
+
+### Usage
+
+```bash
+python image_averaging.py input_dir dark_image_dir [output_dir] --cycle_length N [--noise_removal true|false] [--kernel_size 5]
+```
+
+| Argument | Required | Default | Description |
+|------|------|--------|------|
+| `input_dir` | ✓ | - | FFC input image directory |
+| `dark_image_dir` | ✓ | - | Directory that contains only one dark image |
+| `output_dir` | - | `input_dir_averaged` | Output directory |
+| `--cycle_length` | ✓ | - | Cycle length (number of images per group) |
+| `--noise_removal` | - | vision_params.json | Whether to remove noise (`true` / `false`) |
+| `--kernel_size` | - | vision_params.json | Median filter kernel size |
+
+### Config files (relative to the image_averaging.py path)
+
+- **recipe.json**: cls ranges (nClsDirectionalMin, nClsDirectionalMax, nClsdarkMin, nClsdarkMax)
+- **vision_params.json**: noise_removal, kernel_size (used when not specified)
+
+After processing, prints a good/bad judgment (including directionalMin, directionalMax, directionalMean, darkMin, darkMax, darkMean).
+
+### Examples
+
+```bash
+python image_averaging.py ./ffc_images ./dark_folder --cycle_length 4
+python image_averaging.py ./ffc_images ./dark_folder ./out_avg --cycle_length 8 --noise_removal true --kernel_size 5
+```
+
+### Output
+
+- `output_dir/averaged_0000.tif`, `averaged_0001.tif`, ... (normalized float32 TIFF)
+- `output_dir/dark.bmp` (copy of the dark image)
+- `output_dir/debug/report_normalized.png` (normalized FFC map preview)
+- `output_dir/debug/report_raw.png` (raw FFC map preview before normalization)
+
+---
+
+## 3. apply_ffc_example
+
+An example that applies the generated FFC map to raw images. It divides the raw image by the normalized background map, then demosaics it with the camera Bayer pattern and saves it as BGR.
+
+### Usage
+
+```bash
+cd apply_ffc_example
+# Single image
+python apply_nomalized_FFC.py --input raw.bmp --ffc_map ffc_map.tif --output out.bmp
+# Batch (per folder, matched by file name stem)
+python apply_nomalized_FFC.py --input ./raw_images --ffc_map ./ffc_map --output ./result
+```
+
+| Argument | Description |
+|------|------|
+| `--input` / `-i` | Raw image path or directory |
+| `--ffc_map` / `-f` | Normalized FFC map path or directory ([0,1] float) |
+| `--output` / `-o` | Output BGR image path or directory |
+
+---
+
+## Installation and run summary
+
+```bash
+pip install -r requirements.txt
+# Add salt-pepper noise
+python add_salt_pepper_noise.py [input_folder] [output_folder]
+# Image averaging (create FFC map)
+python image_averaging.py [input_folder] [dark_folder] --cycle_length [number]
+# Apply FFC map
+cd apply_ffc_example && python apply_nomalized_FFC.py -i [raw] -f [ffc_map] -o [output]
+```
+---
+
+## Running the examples with launch.json
+
+You can use the prepared `launch.json` to run the examples directly in VSCode.  
+Select the configuration you want in the **Run and Debug** tab at the top and run it.
+
+---
+
+# 한국어
 
 
 ---
